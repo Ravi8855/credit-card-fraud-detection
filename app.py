@@ -64,4 +64,5 @@ with c3:
 if st.checkbox("Show Raw Data (first 50 rows)"):
     st.write(df.head(50))
 
-st.markdown("---
+st.markdown("---")
+
