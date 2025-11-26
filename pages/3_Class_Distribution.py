@@ -1,22 +1,22 @@
-# pages/3_Class_Distribution.py
 import streamlit as st
 import plotly.express as px
-from utils import load_sample_csv, ensure_feature_order
+from utils import load_sample_csv
 
-st.set_page_config(layout="wide")
-st.title("📚 Class Distribution (sample)")
+
+st.set_page_config(page_title="Class Distribution", layout="wide")
+st.markdown("# 📈 Class Distribution (sample)")
+
 
 try:
-    df = load_sample_csv()
+df = load_sample_csv()
 except FileNotFoundError:
-    st.error("sample_creditcard.csv missing.")
-    st.stop()
+st.error("sample_creditcard.csv not found.")
+st.stop()
 
-df = ensure_feature_order(df)
 
-st.markdown("Distribution of the `Class` column in the sample dataset.")
-fig = px.pie(df, names="Class", hole=0.45, title="Class share (0 = genuine, 1 = fraud)")
+fig = px.histogram(df, x='Class', labels={'Class': 'Class (0=Not Fraud,1=Fraud)'}, title='Class distribution (sample)')
 st.plotly_chart(fig, use_container_width=True)
 
-st.markdown("Show counts by class:")
-st.write(df["Class"].value_counts())
+
+st.markdown('## Quick stats')
+st.write(df['Class'].value_counts())
