@@ -1,42 +1,71 @@
+# pages/5_Manual_Prediction.py
 import streamlit as st
 import pandas as pd
-from utils import load_sample_csv, train_model_pipeline
+from utils import load_sample_csv, ensure_feature_order
+from sklearn.preprocessing import StandardScaler
+from sklearn.linear_model import LogisticRegression
+from sklearn.model_selection import train_test_split
 
-st.title("🧮 Manual Fraud Prediction")
+st.set_page_config(layout="wide")
+st.title("🧮 Manual Transaction Prediction (Synthetic Inputs)")
 
-df = load_sample_csv()
-metrics = train_model_pipeline(df)
+try:
+    df = load_sample_csv()
+except FileNotFoundError:
+    st.error("sample_creditcard.csv missing.")
+    st.stop()
 
-feature_names = metrics["feature_names"]
+df = ensure_feature_order(df)
 
-st.write("Enter synthetic (demo) values below:")
+# Train quick model (same pipeline as other pages)
+X = df.drop("Class", axis=1)
+y = df["Class"]
+X_train, X_test, y_train, y_test = train_test_split(X, y, stratify=y, test_size=0.25, random_state=42)
+scaler = StandardScaler()
+X_train_s = scaler.fit_transform(X_train)
+X_test_s = scaler.transform(X_test)
+model = LogisticRegression(max_iter=2000, solver="lbfgs")
+model.fit(X_train_s, y_train)
 
-with st.form("manual_form"):
-    time_val = st.number_input("Time", 0, 200000, 10000)
-    amount_val = st.number_input("Amount", 0.0, 20000.0, 100.0)
+# UI
+st.markdown("Enter synthetic values (demo ranges). Use sliders and press **Predict Transaction**.")
 
-    st.write("### PCA Components (V1–V28)")
-    v_vals = {}
-    for i in range(1, 29):
-        v_vals[f"V{i}"] = st.slider(f"V{i}", -10.0, 10.0, 0.0)
+TIME_MIN, TIME_MAX = 0, 172800
+V_MIN, V_MAX = -10.0, 10.0
+AMOUNT_MIN, AMOUNT_MAX = 0.0, 20000.0
 
-    submit = st.form_submit_button("Predict")
+feature_names = X.columns.tolist()
 
-if submit:
-    new_row = {"Time": time_val}
-    for i in range(1, 29):
-        new_row[f"V{i}"] = v_vals[f"V{i}"]
-    new_row["Amount"] = amount_val
+with st.form("manual_predict_form"):
+    col1, col2 = st.columns(2)
+    time_val = col1.slider("⏱ Time (seconds)", TIME_MIN, TIME_MAX, int(df["Time"].mean()))
+    amount_val = col2.slider("💰 Amount", AMOUNT_MIN, AMOUNT_MAX, float(df["Amount"].mean()))
 
-    user_df = pd.DataFrame([new_row])[feature_names]
+    st.markdown("### PCA features V1–V28")
+    cols_left, cols_right = st.columns(2)
+    v_inputs = {}
+    for i, fname in enumerate([f"V{i}" for i in range(1, 29)], start=1):
+        default = float(df[fname].mean()) if fname in df.columns else 0.0
+        if i <= 14:
+            v_inputs[fname] = cols_left.slider(fname, float(V_MIN), float(V_MAX), float(default), key=f"v_{fname}")
+        else:
+            v_inputs[fname] = cols_right.slider(fname, float(V_MIN), float(V_MAX), float(default), key=f"v_{fname}")
 
-    scaled = metrics["scaler"].transform(user_df)
-    pred = metrics["model"].predict(scaled)[0]
-    proba = metrics["model"].predict_proba(scaled)[0][1]
+    submit = st.form_submit_button("🔍 Predict Transaction")
+    if submit:
+        manual_dict = {"Time": float(time_val)}
+        for i in range(1, 29):
+            manual_dict[f"V{i}"] = float(v_inputs[f"V{i}"])
+        manual_dict["Amount"] = float(amount_val)
 
-    st.write(f"**Probability of Fraud:** `{proba:.4f}`")
+        manual_df = pd.DataFrame([manual_dict])[feature_names]
+        scaled = scaler.transform(manual_df)
+        pred = model.predict(scaled)[0]
+        proba = model.predict_proba(scaled)[0][1]
 
-    if pred == 1:
-        st.error("⚠️ Fraudulent Transaction")
-    else:
-        st.success("✅ Genuine Transaction")
+        st.markdown("### 🧾 Prediction Result")
+        st.write(f"**Probability (fraud):** `{proba:.4f}`")
+        if pred == 1:
+            st.error("⚠️ Likely FRAUDULENT Transaction")
+        else:
+            st.success("✅ Likely Genuine Transaction")
